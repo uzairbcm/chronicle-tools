@@ -68,11 +68,13 @@ class ChronicleDataType(StrEnum):
     Attributes:
         RAW (str): Represents raw usage events data.
         SURVEY (str): Represents app usage survey data.
+        PREPROCESSED (str): Represents preprocessed usage data.
         IOSSENSOR (str): Represents iOS sensor data.
     """
 
     RAW = "UsageEvents"
     SURVEY = "AppUsageSurvey"
+    PREPROCESSED = "Preprocessed"
     IOSSENSOR = "IOSSensor"
 
 
@@ -97,8 +99,8 @@ def get_matching_files_from_folder(
         ignore_names = []
     matching_files = [
         Path(f)
-        for f in Path(folder).rglob(r"**")
-        if Path(f).is_file() and re.search(file_matching_pattern, str(f)) and all(ignored not in str(f) for ignored in ignore_names)
+        for f in Path(folder).rglob("**")
+        if Path(f).is_file() and re.search(file_matching_pattern, str(f.name)) and all(ignored not in str(f) for ignored in ignore_names)
     ]
     LOGGER.debug(f"Found {len(matching_files)} matching files")
     return matching_files
@@ -211,6 +213,8 @@ class DownloadThreadWorker(QThread):
                             "study_id": self.parent_.study_id_entry.text().strip(),
                             "participant_ids_to_filter": self.parent_.participant_ids_to_filter_list_entry.toPlainText(),
                             "inclusive_checked": self.parent_.inclusive_filter_checkbox.isChecked(),
+                            "raw_checked": self.parent_.download_raw_data_checkbox.isChecked(),
+                            "preprocessed_checked": self.parent_.download_preprocessed_data_checkbox.isChecked(),
                             "survey_checked": self.parent_.download_survey_data_checkbox.isChecked(),
                         }
                     )
@@ -241,6 +245,7 @@ class ChronicleAndroidBulkDataDownloader(QWidget):
         self.dated_file_pattern: str = r"([\s\S]*(\d{1,2}[\.|-]\d{1,2}[\.|-]\d{2,4})[\s\S]*.csv)"
         self.raw_data_file_pattern: str = r"[\s\S]*(Raw)[\s\S]*.csv"
         self.survey_data_file_pattern: str = r"[\s\S]*(Survey)[\s\S]*.csv"
+        self.preprocessed_download_data_file_pattern: str = r"[\s\S]*(Downloaded Preprocessed)[\s\S]*.csv"
         self._init_UI()
         self._load_and_set_config()
 
@@ -493,12 +498,20 @@ class ChronicleAndroidBulkDataDownloader(QWidget):
 
     def _create_checkbox_layout(self) -> QHBoxLayout:
         """
-        Creates the layout for the checkbox.
+        Creates the layout for the checkboxes.
         """
         checkbox_layout = QHBoxLayout()
         checkbox_layout.addStretch()
+
+        self.download_raw_data_checkbox = QCheckBox("Download Raw Data")
+        checkbox_layout.addWidget(self.download_raw_data_checkbox)
+
+        self.download_preprocessed_data_checkbox = QCheckBox("Download Preprocessed Data")
+        checkbox_layout.addWidget(self.download_preprocessed_data_checkbox)
+
         self.download_survey_data_checkbox = QCheckBox("Download Survey Data")
         checkbox_layout.addWidget(self.download_survey_data_checkbox)
+
         checkbox_layout.addStretch()
         return checkbox_layout
 
@@ -595,9 +608,11 @@ class ChronicleAndroidBulkDataDownloader(QWidget):
         """
         self.raw_data_folder = Path(self.download_folder) / "Chronicle Android Raw Data Downloads"
         self.survey_data_folder = Path(self.download_folder) / "Chronicle Android Survey Data Downloads"
+        self.downloaded_preprocessed_data_folder = Path(self.download_folder) / "Chronicle Android Preprocessed Data Downloads"
 
         self.raw_data_folder.mkdir(parents=True, exist_ok=True)
         self.survey_data_folder.mkdir(parents=True, exist_ok=True)
+        self.downloaded_preprocessed_data_folder.mkdir(parents=True, exist_ok=True)
 
         unorganized_raw_data_files = get_matching_files_from_folder(
             folder=self.download_folder,
@@ -617,6 +632,16 @@ class ChronicleAndroidBulkDataDownloader(QWidget):
 
         for file in unorganized_survey_data_files:
             shutil.copy(src=file, dst=self.survey_data_folder)
+            file.unlink()
+
+        unorganized_downloaded_preprocessed_files = get_matching_files_from_folder(
+            folder=self.download_folder,
+            file_matching_pattern=self.preprocessed_download_data_file_pattern,
+            ignore_names=["Archive", "Chronicle Android Preprocessed Data Downloads"],
+        )
+
+        for file in unorganized_downloaded_preprocessed_files:
+            shutil.copy(src=file, dst=self.downloaded_preprocessed_data_folder)
             file.unlink()
 
         LOGGER.debug("Finished organizing downloaded Chronicle Android data.")
@@ -713,12 +738,16 @@ class ChronicleAndroidBulkDataDownloader(QWidget):
 
         csv_response.raise_for_status()
 
-        if data_type == ChronicleDataType.RAW:
-            data_type_str = "Raw Data"
-        elif data_type == ChronicleDataType.SURVEY:
-            data_type_str = "Survey Data"
-        else:
-            raise ValueError
+        match data_type:
+            case ChronicleDataType.RAW:
+                data_type_str = "Raw Data"
+            case ChronicleDataType.PREPROCESSED:
+                data_type_str = "Downloaded Preprocessed Data"
+            case ChronicleDataType.SURVEY:
+                data_type_str = "Survey Data"
+            case _:
+                msg = f"Unrecognized Chronicle data download type {data_type}"
+                raise ValueError(msg)
 
         output_filepath = (
             Path(self.download_folder)
@@ -763,14 +792,26 @@ class ChronicleAndroidBulkDataDownloader(QWidget):
         for i, participant_id in enumerate(filtered_participant_id_list):
             semaphore = asyncio.Semaphore(1)
             async with semaphore:
-                await self._download_participant_Chronicle_data_type(
-                    client=client,
-                    participant_id=participant_id,
-                    data_type=ChronicleDataType.RAW,
-                )
-                LOGGER.debug(
-                    f"Finished downloading {ChronicleDataType.RAW} data for device {participant_id} ({i + 1}/{len(filtered_participant_id_list)})"
-                )
+                if self.download_raw_data_checkbox.isChecked():
+                    await self._download_participant_Chronicle_data_type(
+                        client=client,
+                        participant_id=participant_id,
+                        data_type=ChronicleDataType.RAW,
+                    )
+                    LOGGER.debug(
+                        f"Finished downloading {ChronicleDataType.RAW} data for device {participant_id} ({i + 1}/{len(filtered_participant_id_list)})"
+                    )
+
+                if self.download_preprocessed_data_checkbox.isChecked():
+                    await self._download_participant_Chronicle_data_type(
+                        client=client,
+                        participant_id=participant_id,
+                        data_type=ChronicleDataType.PREPROCESSED,
+                    )
+                    LOGGER.debug(
+                        f"Finished downloading {ChronicleDataType.PREPROCESSED} data for device {participant_id} ({i + 1}/{len(filtered_participant_id_list)})"
+                    )
+
                 if self.download_survey_data_checkbox.isChecked():
                     await self._download_participant_Chronicle_data_type(
                         client=client,
@@ -789,7 +830,7 @@ class ChronicleAndroidBulkDataDownloader(QWidget):
         self.run_button.setEnabled(False)
 
     @typing.no_type_check
-    def on_download_complete(self):
+    def on_download_complete(self) -> None:
         del self.worker
 
         self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
@@ -810,7 +851,7 @@ class ChronicleAndroidBulkDataDownloader(QWidget):
         self.show()
 
     @typing.no_type_check
-    def on_download_error(self, error_message):
+    def on_download_error(self, error_message) -> None:
         del self.worker
 
         self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
