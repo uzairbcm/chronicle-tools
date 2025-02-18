@@ -60,11 +60,11 @@ def get_matching_files_from_folder(
     """
     LOGGER.debug(f"Getting matching files from folder: {folder} with pattern: {file_matching_pattern}")
     if not ignore_names:
-        ignore_names = []
+        ignore_names = ["Preprocessed"]
     matching_files = [
         str(f)
-        for f in Path(folder).rglob(r"**")
-        if Path(f).is_file() and re.search(file_matching_pattern, str(f)) and all(ignored not in str(f) for ignored in ignore_names)
+        for f in Path(folder).rglob("**")
+        if Path(f).is_file() and re.search(file_matching_pattern, str(f.name)) and all(ignored not in str(f) for ignored in ignore_names)
     ]
     LOGGER.debug(f"Found {len(matching_files)} matching files")
     return matching_files
@@ -173,7 +173,7 @@ class ChronicleAndroidRawDataPreprocessorOptions:
     study_name: str = ""
     raw_data_folder: Path | str = ""
     survey_data_folder: Path | str = ""
-    raw_data_file_pattern: str = r"[\s\S]*(Raw)[\s\S]*.csv"
+    raw_data_file_pattern: str = r"[\s\S]*.csv"
     survey_data_file_pattern: str = r"[\s\S]*(Survey)[\s\S]*.csv"
     use_survey_data: bool = False
     filter_file: Path | str = ""
@@ -1092,8 +1092,8 @@ class ChronicleAndroidRawDataPreprocessor:
         try:
             if not len(Chronicle_Android_raw_data_files) > 0:
                 # If no raw data files are found, log a warning and print a message
-                LOGGER.warning("No Chronicle Android raw data files found in the provided folder")
-                return print("No Chronicle Android raw data files found in the provided folder.")
+                LOGGER.error("No Chronicle Android raw data files found in the provided folder")
+                # return print("No Chronicle Android raw data files found in the provided folder.")
             for raw_data_file in Chronicle_Android_raw_data_files:
                 preprocessed_data_save_folder = self.preprocess_Chronicle_Android_raw_data_file_without_survey_data(raw_data_file=raw_data_file)
         except pd.errors.EmptyDataError as e:
