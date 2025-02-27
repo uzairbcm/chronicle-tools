@@ -265,6 +265,8 @@ class ChronicleAndroidRawDataPreprocessor:
         Returns:
             str | None: The fixed timestamp string or None if the format is incorrect.
         """
+        if "Z" in timestamp:
+            timestamp = timestamp.replace("Z", "+00:00")
         expected_timestamp_length = 25
         if len(timestamp) == expected_timestamp_length:  # Check if the timestamp is missing milliseconds based on length
             return timestamp[:-6] + ".000" + timestamp[-6:]  # Add .000 before the timezone info
@@ -344,7 +346,7 @@ class ChronicleAndroidRawDataPreprocessor:
         )
 
         for group in duplicate_indices_groups_list:
-            LOGGER.warning(
+            LOGGER.debug(
                 f"{self.current_participant_raw_data_df['participant_id'].iloc[0]}: duplicates found for event_timestamp {self.current_participant_raw_data_df.loc[group[0], 'event_timestamp']}."
             )
             for i, idx in enumerate(group):
@@ -364,6 +366,15 @@ class ChronicleAndroidRawDataPreprocessor:
                 self.current_participant_raw_data_df["event_timestamp"], utc=True
             ).dt.tz_convert(timezone)
             LOGGER.debug("Timezone conversion completed")
+
+        # def is_same_timezone_with_dst(tz1, tz2):
+        #     if tz1 is None or tz2 is None:
+        #         return False
+        #     return (
+        #         tz1.utcoffset(None) == tz2.utcoffset(None)
+        #         or tz1.utcoffset(None) == tz2.utcoffset(None) + pd.Timedelta(hours=1)
+        #         or tz1.utcoffset(None) == tz2.utcoffset(None) - pd.Timedelta(hours=1)
+        #     )
 
         LOGGER.info("Starting timezone handling operations...")
         initial_row_count = len(self.current_participant_raw_data_df)
@@ -387,7 +398,7 @@ class ChronicleAndroidRawDataPreprocessor:
                 mask = (timezones_series == self.current_data_primary_timezone) & timezones_series.notna()
                 self.current_participant_raw_data_df = self.current_participant_raw_data_df[mask]
                 rows_removed = initial_row_count - len(self.current_participant_raw_data_df)
-                LOGGER.info(f"Removed {rows_removed} rows with non-primary timezones")
+                LOGGER.warning(f"Removed {rows_removed} rows with non-primary timezones")
 
         elif timezone_option == TimezoneHandlingOption.CONVERT_ALL_DATA_TO_PRIMARY_TIMEZONE:
             LOGGER.info(f"Primary timezone: {self.current_data_primary_timezone}")
@@ -3050,7 +3061,7 @@ if __name__ == "__main__":
 
     # Set up logging configuration
     logging.basicConfig(
-        level=logging.WARNING,
+        level=logging.INFO,
         format="%(asctime)s - %(levelname)s - Line %(lineno)d - %(message)s",
         handlers=[logging.FileHandler("Chronicle_Android_raw_data_preprocessor_app.log"), logging.StreamHandler()],
     )
