@@ -351,7 +351,7 @@ class ChronicleAndroidBulkDataDownloader(QWidget):
             }"""
         )
         self.download_folder_label.setWordWrap(True)
-        self.download_folder_label.setAlignment(Qt.AlignCenter) # type: ignore
+        self.download_folder_label.setAlignment(Qt.AlignCenter)  # type: ignore
         self.download_folder_label.setFixedWidth(400)
         label_layout.addStretch()
         label_layout.addWidget(self.download_folder_label)
@@ -544,6 +544,8 @@ class ChronicleAndroidBulkDataDownloader(QWidget):
         self.study_id_entry.setText(config.get("study_id", ""))
         self.participant_ids_to_filter_list_entry.setText(config.get("participant_ids_to_filter", ""))
         self.inclusive_filter_checkbox.setChecked(config.get("inclusive_checked", False))
+        self.download_raw_data_checkbox.setChecked(config.get("raw_checked", False))
+        self.download_preprocessed_data_checkbox.setChecked(config.get("preprocessed_checked", False))
         self.download_survey_data_checkbox.setChecked(config.get("survey_checked", False))
 
         if self.download_folder:
