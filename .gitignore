@@ -173,3 +173,11 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 pyinstaller-cmds.txt
+
+test
+test/*
+
+Chronicle Android Preprocessed Data
+Chronicle Android Preprocessed Data/*
+
+Chronicle_Android_raw_data_preprocessor_app_config.json
